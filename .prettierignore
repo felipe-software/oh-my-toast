@@ -1,0 +1,9 @@
+node_modules
+.expo
+android
+ios
+lib
+dist
+coverage
+*.tgz
+bun.lock
