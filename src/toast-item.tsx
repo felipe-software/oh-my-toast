@@ -1,6 +1,15 @@
-import { Pressable, StyleSheet, Text, View, type TextStyle, type ViewStyle } from "react-native";
+import {
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+    type LayoutChangeEvent,
+    type TextStyle,
+    type ViewStyle,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+    cancelAnimation,
     FadeInUp,
     FadeOutUp,
     LinearTransition,
@@ -12,25 +21,52 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 import { CircleCheck, CircleX, Info as InfoIcon } from "lucide-react-native";
 
+import { rubberBand } from "./rubber-band";
 import { useToastStore } from "./store";
-import type { ToastColors, ToastItem } from "./types";
+import type {
+    ToastColors,
+    ToastItem,
+    ToastSwipeDistortionConfig,
+    ToastSwipeSpringConfig,
+} from "./types";
 
 interface ToastItemComponentProps {
     colors: ToastColors;
+    distortionConfig: Required<ToastSwipeDistortionConfig>;
+    dragOpacityDistance: number;
     maxWidth: number;
+    minimumOpacity: number;
+    opacityAnimationDuration: number;
+    springConfig: Required<ToastSwipeSpringConfig>;
     swipeDismissThreshold: number;
+    swipeRubberBandCoefficient: number;
     toast: ToastItem;
+    viewportWidth: number;
 }
 
 export function ToastItemComponent({
     colors,
+    distortionConfig,
+    dragOpacityDistance,
     maxWidth,
+    minimumOpacity,
+    opacityAnimationDuration,
+    springConfig,
     swipeDismissThreshold,
+    swipeRubberBandCoefficient,
     toast,
+    viewportWidth,
 }: ToastItemComponentProps) {
     const removeToast = useToastStore((state) => state.removeToast);
     const translateX = useSharedValue(0);
+    const translateY = useSharedValue(0);
     const opacity = useSharedValue(1);
+    const dragOriginX = useSharedValue(0);
+    const toastWidth = useSharedValue(maxWidth);
+    const toastHeight = useSharedValue(44);
+    const scaleX = useSharedValue(1);
+    const scaleY = useSharedValue(1);
+    const rotation = useSharedValue(0);
     const toastId = toast.id;
 
     const handlePress = () => {
@@ -38,29 +74,116 @@ export function ToastItemComponent({
         removeToast(toastId);
     };
 
+    const handleLayout = (event: LayoutChangeEvent) => {
+        toastWidth.value = event.nativeEvent.layout.width;
+        toastHeight.value = event.nativeEvent.layout.height;
+    };
+
     const swipeGesture = Gesture.Pan()
         .activeOffsetX([-10, 10])
+        .onStart(() => {
+            cancelAnimation(translateX);
+            cancelAnimation(translateY);
+            cancelAnimation(opacity);
+            cancelAnimation(scaleX);
+            cancelAnimation(scaleY);
+            cancelAnimation(rotation);
+            dragOriginX.value = translateX.value;
+        })
         .onUpdate((event) => {
-            translateX.value = event.translationX;
-            opacity.value = Math.max(1 - Math.abs(event.translationX) / 200, 0.4);
+            const dampedTranslation = rubberBand(
+                event.translationX,
+                toastWidth.value,
+                swipeRubberBandCoefficient,
+            );
+            const nextTranslateX = dragOriginX.value + dampedTranslation;
+            const nextTranslateY =
+                distortionConfig.verticalTranslationFactor === 0
+                    ? 0
+                    : rubberBand(
+                          event.translationY,
+                          toastHeight.value,
+                          swipeRubberBandCoefficient,
+                      ) * distortionConfig.verticalTranslationFactor;
+            const distortionProgress = Math.min(
+                Math.abs(event.translationX) / swipeDismissThreshold,
+                1,
+            );
+            const direction = event.translationX >= 0 ? 1 : -1;
+
+            translateX.value = nextTranslateX;
+            translateY.value = nextTranslateY;
+            opacity.value = Math.max(
+                1 - Math.abs(nextTranslateX) / dragOpacityDistance,
+                minimumOpacity,
+            );
+            scaleX.value = 1 + distortionProgress * distortionConfig.maxStretch;
+            scaleY.value = 1 - distortionProgress * distortionConfig.maxCompression;
+            rotation.value = direction * distortionProgress * distortionConfig.maxRotation;
         })
         .onEnd((event) => {
-            if (Math.abs(event.translationX) > swipeDismissThreshold) {
-                const exitX = event.translationX > 0 ? 500 : -500;
-                translateX.value = withTiming(exitX, { duration: 180 }, () => {
-                    scheduleOnRN(removeToast, toastId);
+            if (Math.abs(event.translationX) >= swipeDismissThreshold) {
+                const direction = event.translationX >= 0 ? 1 : -1;
+                const directionalVelocity = Math.max(direction * event.velocityX, 0) * direction;
+                const exitX = direction * (viewportWidth + toastWidth.value);
+
+                translateX.value = withSpring(
+                    exitX,
+                    { ...springConfig, velocity: directionalVelocity },
+                    (finished) => {
+                        if (finished) {
+                            scheduleOnRN(removeToast, toastId);
+                        }
+                    },
+                );
+                opacity.value = withTiming(0, { duration: opacityAnimationDuration });
+                translateY.value = withSpring(0, springConfig);
+                scaleX.value = withSpring(1, springConfig);
+                scaleY.value = withSpring(1, {
+                    ...springConfig,
+                    overshootClamping: distortionConfig.maxVerticalStretch === 0,
                 });
-                opacity.value = withTiming(0, { duration: 180 });
+                rotation.value = withSpring(0, springConfig);
                 return;
             }
 
-            translateX.value = withSpring(0);
-            opacity.value = withSpring(1);
+            translateX.value = withSpring(0, springConfig);
+            translateY.value = withSpring(0, springConfig);
+            opacity.value = withTiming(1, { duration: opacityAnimationDuration });
+            scaleX.value = withSpring(1, springConfig);
+            scaleY.value = withSpring(1, {
+                ...springConfig,
+                overshootClamping: distortionConfig.maxVerticalStretch === 0,
+            });
+            rotation.value = withSpring(0, springConfig);
+        })
+        .onFinalize((_event, success) => {
+            if (success) {
+                return;
+            }
+
+            translateX.value = withSpring(0, springConfig);
+            translateY.value = withSpring(0, springConfig);
+            opacity.value = withTiming(1, { duration: opacityAnimationDuration });
+            scaleX.value = withSpring(1, springConfig);
+            scaleY.value = withSpring(1, {
+                ...springConfig,
+                overshootClamping: distortionConfig.maxVerticalStretch === 0,
+            });
+            rotation.value = withSpring(0, springConfig);
         });
 
     const swipeStyle = useAnimatedStyle(() => ({
         opacity: opacity.value,
-        transform: [{ translateX: translateX.value }],
+        transform: [
+            { translateX: translateX.value },
+            { translateY: translateY.value },
+            { rotateZ: `${rotation.value}deg` },
+            { scaleX: scaleX.value },
+            {
+                scaleY: Math.min(scaleY.value, 1 + distortionConfig.maxVerticalStretch),
+            },
+        ],
     }));
 
     const isInfo = toast.type === "info";
@@ -90,6 +213,7 @@ export function ToastItemComponent({
                     <Pressable
                         accessibilityLiveRegion="polite"
                         accessibilityRole="alert"
+                        onLayout={handleLayout}
                         onPress={handlePress}
                         style={[
                             styles.toast,

@@ -12,7 +12,16 @@ bun run example
 ```
 
 The app in `example/` links the repository root as a local dependency and imports the public package
-API from `oh-my-toast`.
+API from `oh-my-toast`. Its Metro config resolves that import directly to `src/index.ts` and watches
+the library source, so edits under `src/` appear through Fast Refresh without rebuilding `lib/`.
+
+After changing `example/metro.config.js`, start Metro once with a clean cache:
+
+```sh
+bun --cwd example start --clear
+```
+
+After that, the regular `bun run example` command is enough.
 
 ## Usage
 
@@ -42,6 +51,38 @@ export function App() {
     );
 }
 ```
+
+`Toaster` accepts these optional layout and swipe settings:
+
+| Prop                            | Default | Description                                                                                      |
+| ------------------------------- | ------: | ------------------------------------------------------------------------------------------------ |
+| `maxToastWidth`                 |   `400` | Maximum toast width in points.                                                                   |
+| `swipeDismissThreshold`         |    `80` | Physical horizontal drag distance required to dismiss.                                           |
+| `swipeRubberBandCoefficient`    |  `0.28` | Drag resistance. Lower positive values feel heavier; higher values feel looser.                  |
+| `swipeDragOpacityDistance`      |   `160` | Visible drag distance over which opacity fades.                                                  |
+| `swipeMinimumOpacity`           |  `0.35` | Lowest opacity reached while dragging.                                                           |
+| `swipeOpacityAnimationDuration` | `180ms` | Duration of opacity transitions when releasing the toast.                                        |
+| `swipeSpringConfig`             |       — | Overrides `damping`, `mass`, and `stiffness` for return and release animations.                  |
+| `swipeDistortionConfig`         |       — | Overrides maximum horizontal stretch, vertical compression, and rotation applied while dragging. |
+
+All swipe defaults are exported as `DEFAULT_TOAST_SWIPE_CONFIG`. For example:
+
+```tsx
+<Toaster
+    swipeRubberBandCoefficient={0.2}
+    swipeDistortionConfig={{
+        maxStretch: 0.24,
+        maxCompression: 0.16,
+        maxVerticalStretch: 0,
+        verticalTranslationFactor: 0,
+        maxRotation: 4,
+    }}
+    swipeSpringConfig={{ damping: 16, mass: 1, stiffness: 220 }}
+/>
+```
+
+By default, the toast only deforms and moves horizontally. Vertical compression, vertical
+translation, vertical spring stretch, and rotation are disabled unless explicitly configured.
 
 Show a toast from anywhere:
 
