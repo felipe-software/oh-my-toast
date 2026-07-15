@@ -2,27 +2,6 @@
 
 Animated toasts for React Native, powered by Reanimated.
 
-## Development
-
-Install the repository and start the Expo example:
-
-```sh
-bun install
-bun run example
-```
-
-The app in `example/` links the repository root as a local dependency and imports the public package
-API from `oh-my-toast`. Its Metro config resolves that import directly to `src/index.ts` and watches
-the library source, so edits under `src/` appear through Fast Refresh without rebuilding `lib/`.
-
-After changing `example/metro.config.js`, start Metro once with a clean cache:
-
-```sh
-bun --cwd example start --clear
-```
-
-After that, the regular `bun run example` command is enough.
-
 ## Usage
 
 Install the package and its native peer dependencies:
@@ -110,3 +89,24 @@ bun run format
 bun run format:check
 npm pack --dry-run
 ```
+
+## Development
+
+Install the repository and start the Expo example:
+
+```sh
+bun install
+bun run example
+```
+
+The app in `example/` links the repository root as a local dependency and imports the public package
+API from `oh-my-toast`. Its Metro config resolves that import directly to `src/index.ts` and watches
+the library source, so edits under `src/` appear through Fast Refresh without rebuilding `lib/`.
+
+After changing `example/metro.config.js`, start Metro once with a clean cache:
+
+```sh
+bun --cwd example start --clear
+```
+
+After that, the regular `bun run example` command is enough.
