@@ -40,4 +40,6 @@ export interface ToastContainerProps {
     colors?: Partial<ToastColors>;
     /** Style applied to the absolute container around all toasts. */
     style?: StyleProp<ViewStyle>;
+    maxToastWidth: number
+    swipeDismissThreshold: number
 }

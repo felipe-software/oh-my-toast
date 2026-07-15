@@ -20,7 +20,7 @@ Install the package and its native peer dependencies:
 
 ```sh
 npm install oh-my-toast react-native-gesture-handler react-native-reanimated \
-  react-native-safe-area-context react-native-svg
+  react-native-safe-area-context react-native-svg react-native-worklets
 ```
 
 Mount the toaster once near the root of the app. It must be inside Gesture Handler and safe-area
